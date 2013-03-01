@@ -9,12 +9,29 @@ import re
 from django.core.validators import EMPTY_VALUES
 from django.forms import ValidationError
 from django.forms.fields import Field, RegexField, Select, CharField
-from django.utils.encoding import smart_text
 from django.utils.translation import ugettext_lazy as _
 
 
 phone_digits_re = re.compile(r'^(?:1-?)?(\d{3})[-\.]?(\d{3})[-\.]?(\d{4})$')
 ssn_re = re.compile(r"^(?P<area>\d{3})[-\ ]?(?P<group>\d{2})[-\ ]?(?P<serial>\d{4})$")
+
+
+"""
+A mixin to fix errors caused by using smart_text
+in Django version < 1.5
+"""
+class SmartTextMixin(object):
+
+    def _smart_text(self, s, encoding='utf-8', strings_only=False, errors='strict'):
+        import django
+
+        if django.VERSION >= 1.5:
+            from django.utils.encoding import smart_text
+            return smart_text(s, encoding, strings_only, errors)
+        else:
+            from django.utils.encoding import smart_unicode
+            return smart_unicode(s, encoding, strings_only, errors)
+
 
 class USZipCodeField(RegexField):
     default_error_messages = {
@@ -25,7 +42,7 @@ class USZipCodeField(RegexField):
         super(USZipCodeField, self).__init__(r'^\d{5}(?:-\d{4})?$',
             max_length, min_length, *args, **kwargs)
 
-class USPhoneNumberField(CharField):
+class USPhoneNumberField(SmartTextMixin, CharField):
     default_error_messages = {
         'invalid': _('Phone numbers must be in XXX-XXX-XXXX format.'),
     }
@@ -34,7 +51,9 @@ class USPhoneNumberField(CharField):
         super(USPhoneNumberField, self).clean(value)
         if value in EMPTY_VALUES:
             return ''
-        value = re.sub('(\(|\)|\s+)', '', smart_text(value))
+             
+        value = re.sub('(\(|\)|\s+)', '', _smart_text(value))
+
         m = phone_digits_re.search(value)
         if m:
             return '%s-%s-%s' % (m.group(1), m.group(2), m.group(3))
